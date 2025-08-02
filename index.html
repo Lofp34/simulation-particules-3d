@@ -110,6 +110,11 @@
             gap: 15px 20px;
         }
 
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
         .control-group label {
             display: block;
             margin-bottom: 8px;
@@ -122,7 +127,7 @@
             cursor: pointer;
         }
 
-        .control-group.single-button {
+        .control-group.single-button, .control-group.full-width {
              grid-column: 1 / -1;
              text-align: center;
         }
@@ -134,6 +139,23 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+        }
+        
+        .control-group.full-width {
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .control-group.full-width label {
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .control-group.full-width input {
+            margin-left: 10px;
+            width: 18px;
+            height: 18px;
         }
 
         .control-group span {
@@ -188,6 +210,10 @@
                 <div class="control-group" data-effect="spiral">
                     <label>Vitesse Couleur <span id="spiral-color-speed-value">20</span></label>
                     <input type="range" id="spiral-color-speed" min="0" max="100" step="1" value="20">
+                </div>
+                <div class="control-group full-width" data-effect="spiral">
+                    <label for="spiral-bw-toggle">Noir & Blanc</label>
+                    <input type="checkbox" id="spiral-bw-toggle">
                 </div>
                 
                 <!-- Contrôles pour le Tunnel -->
@@ -261,7 +287,7 @@
         // --- États et Configurations des Effets ---
         let three, fractal, tunnelParticles = [];
         const config = {
-            spiral: { arms: 6, rotationSpeed: 1.0, thickness: 4, colorSpeed: 20 },
+            spiral: { arms: 6, rotationSpeed: 1.0, thickness: 4, colorSpeed: 20, blackAndWhite: false },
             tunnel: { density: 200, speed: 5 },
             kaleidoscope: { slices: 8, speed: 0.5 },
             gravwave: { amplitude: 0.25, wavelength: 150.0, gridSize: 50, gridSpacing: 3 },
@@ -286,6 +312,7 @@
             document.getElementById('spiral-speed').addEventListener('input', e => { config.spiral.rotationSpeed = parseFloat(e.target.value); document.getElementById('spiral-speed-value').textContent = parseFloat(e.target.value).toFixed(1); });
             document.getElementById('spiral-thickness').addEventListener('input', e => { config.spiral.thickness = parseInt(e.target.value); document.getElementById('spiral-thickness-value').textContent = e.target.value; });
             document.getElementById('spiral-color-speed').addEventListener('input', e => { config.spiral.colorSpeed = parseInt(e.target.value); document.getElementById('spiral-color-speed-value').textContent = e.target.value; });
+            document.getElementById('spiral-bw-toggle').addEventListener('change', e => { config.spiral.blackAndWhite = e.target.checked; });
             document.getElementById('tunnel-density').addEventListener('input', e => { config.tunnel.density = parseInt(e.target.value); document.getElementById('tunnel-density-value').textContent = e.target.value; initTunnel(); });
             document.getElementById('tunnel-speed').addEventListener('input', e => { config.tunnel.speed = parseFloat(e.target.value); document.getElementById('tunnel-speed-value').textContent = e.target.value; });
             document.getElementById('k-slices').addEventListener('input', e => { config.kaleidoscope.slices = parseInt(e.target.value); document.getElementById('k-slices-value').textContent = e.target.value; });
@@ -319,7 +346,6 @@
             const isCollapsed = mainContainer.classList.toggle('controls-collapsed');
             iconHideControls.classList.toggle('hidden', isCollapsed);
             iconShowControls.classList.toggle('hidden', !isCollapsed);
-            // Redimensionner après l'animation pour un rendu correct
             setTimeout(onResize, 400); 
         }
 
@@ -446,7 +472,31 @@
         }
 
         // --- Fonctions de Dessin ---
-        function drawSpiral(w, h, cx, cy) { ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fillRect(0,0,w,h); ctx.lineWidth = config.spiral.thickness; const maxR = Math.sqrt(cx*cx+cy*cy); for (let i=0; i<config.spiral.arms; i++) { ctx.beginPath(); const angleOffset = (Math.PI*2/config.spiral.arms)*i; for (let r=0; r<maxR; r+=2) { const angle = r*0.1 + time*config.spiral.rotationSpeed + angleOffset; const x = cx+Math.cos(angle)*r; const y = cy+Math.sin(angle)*r; if(r===0)ctx.moveTo(x,y); else ctx.lineTo(x,y); } const hue = (time*config.spiral.colorSpeed + i*(360/config.spiral.arms))%360; ctx.strokeStyle = `hsl(${hue},100%,60%)`; ctx.stroke(); } }
+        function drawSpiral(w, h, cx, cy) {
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(0,0,w,h);
+            ctx.lineWidth = config.spiral.thickness;
+            const maxR = Math.sqrt(cx*cx+cy*cy);
+            for (let i=0; i<config.spiral.arms; i++) {
+                ctx.beginPath();
+                const angleOffset = (Math.PI*2/config.spiral.arms)*i;
+                for (let r=0; r<maxR; r+=2) {
+                    const angle = r*0.1 + time*config.spiral.rotationSpeed + angleOffset;
+                    const x = cx+Math.cos(angle)*r;
+                    const y = cy+Math.sin(angle)*r;
+                    if(r===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                }
+                if (config.spiral.blackAndWhite) {
+                    const lightness = 50 + Math.sin(time * (config.spiral.colorSpeed / 20) + angleOffset) * 50;
+                    ctx.strokeStyle = `hsl(0, 0%, ${lightness}%)`;
+                } else {
+                    const hue = (time*config.spiral.colorSpeed + i*(360/config.spiral.arms))%360;
+                    ctx.strokeStyle = `hsl(${hue},100%,60%)`;
+                }
+                ctx.stroke();
+            }
+        }
+
         function drawTunnel(w, h, cx, cy) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(0,0,w,h); const maxR = w/2; tunnelParticles.forEach(p => { p.radius += config.tunnel.speed; if (p.radius > maxR) p.radius = Math.random()*10; const x = cx+Math.cos(p.angle)*p.radius; const y = cy+Math.sin(p.angle)*p.radius; const size = p.radius/50; ctx.beginPath(); ctx.arc(x,y,size,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); }); }
         function drawKaleidoscope(w, h, cx, cy) { ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.fillRect(0,0,w,h); const { slices, speed } = config.kaleidoscope; const sliceAngle = Math.PI*2/slices; for (let i=0; i<slices; i++) { ctx.save(); ctx.translate(cx,cy); ctx.rotate(i*sliceAngle); if(i%2===0)ctx.scale(1,-1); for (let j=0; j<10; j++) { const hue = (time*50+j*20)%360; ctx.fillStyle = `hsl(${hue},100%,50%)`; const x = Math.cos(time*speed+j)*(w/4); const y = Math.sin(time*speed*2+j)*(h/4); const size = 5+Math.sin(time+j)*4; ctx.beginPath(); ctx.arc(x,y,size,0,Math.PI*2); ctx.fill(); } ctx.restore(); } }
         function drawGravWave() {
