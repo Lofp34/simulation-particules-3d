@@ -504,7 +504,8 @@
 
         function autoZoomStep() {
             if (currentEffect !== 'fractal' || !config.fractal.autoZoom) return;
-            config.fractal.scale *= 0.98;
+            // La vitesse de zoom est maintenant deux fois plus rapide
+            config.fractal.scale *= 0.96; 
             config.fractal.maxIterations = Math.min(1000, config.fractal.maxIterations + 1);
             fractal.worker.postMessage({ ...config.fractal, width: canvas.width, height: canvas.height });
         }
