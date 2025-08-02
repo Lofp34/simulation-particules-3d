@@ -1,1 +1,285 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Simulation Interactive</title>
+    <style>
+        /* CSS reset and layout setup */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            width: 100%;
+            background-color: #050510;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Main container uses flexbox for a robust top/bottom layout */
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        /* The canvas container will grow to fill available space */
+        .canvas-container {
+            flex-grow: 1;
+            min-height: 0; /* Essential for flexbox sizing */
+            position: relative;
+        }
+
+        #visualization-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Controls panel at the bottom */
+        .controls-panel {
+            flex-shrink: 0; /* Prevent panel from shrinking */
+            padding: 15px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px 20px;
+            box-sizing: border-box;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        .control-group span {
+            float: right;
+            font-family: monospace;
+            color: #cda4ff;
+        }
+    </style>
+    <!-- Google Fonts for better typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="canvas-container">
+            <canvas id="visualization-canvas"></canvas>
+        </div>
+        <div class="controls-panel">
+            <div class="control-group">
+                <label for="amplitude">Amplitude <span id="amplitude-value">0.25</span></label>
+                <input type="range" id="amplitude" min="0" max="1" step="0.01" value="0.25">
+            </div>
+            <div class="control-group">
+                <label for="wavelength">Longueur d'onde <span id="wavelength-value">150</span></label>
+                <input type="range" id="wavelength" min="20" max="500" step="1" value="150">
+            </div>
+            <div class="control-group">
+                <label for="color">Couleur <span id="color-value">270</span></label>
+                <input type="range" id="color" min="0" max="360" step="1" value="270">
+            </div>
+            <div class="control-group">
+                <label for="rotationspeed">Rotation <span id="rotationspeed-value">0.2</span></label>
+                <input type="range" id="rotationspeed" min="0" max="2" step="0.05" value="0.2">
+            </div>
+        </div>
+    </div>
+
+    <!-- Import map for Three.js modules from CDN -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        // Import necessary components from Three.js
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Scene Setup ---
+        let scene, camera, renderer, controls;
+        let particles, originalPositions;
+        const clock = new THREE.Clock();
+        const canvasContainer = document.querySelector('.canvas-container');
+
+        // --- Animation Parameters (mutable with 'let') ---
+        let WAVE_AMPLITUDE = 0.25;
+        let WAVE_LENGTH = 150.0;
+        const GRID_SIZE = 100;
+        const GRID_SPACING = 2;
+        const Y_OFFSET = 30; // Vertical offset to raise the wave
+        const ANIMATION_DURATION = 30;
+        const INITIAL_HUE = 270;
+
+        // Calculated wave properties
+        const angularFrequency = (2 * Math.PI) / ANIMATION_DURATION;
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 2000);
+            camera.position.set(GRID_SIZE * 0.7, GRID_SIZE * 0.7, GRID_SIZE * 1.2);
+            camera.lookAt(scene.position);
+
+            // Renderer
+            const canvas = document.getElementById('visualization-canvas');
+            renderer = new THREE.WebGLRenderer({ antialias: true, canvas: canvas });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 50;
+            controls.maxDistance = 500;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 0.2;
+
+            // --- Particle Grid Creation ---
+            createParticleGrid();
+            
+            // --- Setup UI Controls ---
+            setupUI();
+
+            // --- Event Listeners ---
+            window.addEventListener('resize', onWindowResize, false);
+            onWindowResize(); // Call once to set initial size correctly.
+        }
+
+        function setupUI() {
+            const amplitudeSlider = document.getElementById('amplitude');
+            const wavelengthSlider = document.getElementById('wavelength');
+            const rotationSlider = document.getElementById('rotationspeed');
+            const colorSlider = document.getElementById('color');
+            
+            const amplitudeValue = document.getElementById('amplitude-value');
+            const wavelengthValue = document.getElementById('wavelength-value');
+            const rotationValue = document.getElementById('rotationspeed-value');
+            const colorValue = document.getElementById('color-value');
+
+            amplitudeSlider.addEventListener('input', (event) => {
+                WAVE_AMPLITUDE = parseFloat(event.target.value);
+                amplitudeValue.textContent = WAVE_AMPLITUDE.toFixed(2);
+            });
+
+            wavelengthSlider.addEventListener('input', (event) => {
+                WAVE_LENGTH = parseFloat(event.target.value);
+                wavelengthValue.textContent = WAVE_LENGTH.toFixed(0);
+            });
+            
+            rotationSlider.addEventListener('input', (event) => {
+                controls.autoRotateSpeed = parseFloat(event.target.value);
+                rotationValue.textContent = controls.autoRotateSpeed.toFixed(2);
+            });
+
+            colorSlider.addEventListener('input', (event) => {
+                const hue = parseInt(event.target.value);
+                particles.material.color.setHSL(hue / 360, 1.0, 0.6);
+                colorValue.textContent = hue;
+            });
+        }
+
+        function createParticleGrid() {
+            const numParticles = GRID_SIZE * GRID_SIZE;
+            const positions = new Float32Array(numParticles * 3);
+            originalPositions = new Float32Array(numParticles * 3);
+
+            let i = 0;
+            const halfGridWorldSize = (GRID_SIZE * GRID_SPACING) / 2;
+
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let z = 0; z < GRID_SIZE; z++) {
+                    const posX = x * GRID_SPACING - halfGridWorldSize;
+                    const posY = Y_OFFSET; // Apply the vertical offset
+                    const posZ = z * GRID_SPACING - halfGridWorldSize;
+
+                    positions[i * 3] = posX;
+                    positions[i * 3 + 1] = posY;
+                    positions[i * 3 + 2] = posZ;
+                    
+                    originalPositions[i * 3] = posX;
+                    originalPositions[i * 3 + 1] = posY;
+                    originalPositions[i * 3 + 2] = posZ;
+
+                    i++;
+                }
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 1.5,
+                sizeAttenuation: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+            material.color.setHSL(INITIAL_HUE / 360, 1.0, 0.6);
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+            
+            const waveNumber = (2 * Math.PI) / WAVE_LENGTH;
+            
+            const positions = particles.geometry.attributes.position.array;
+
+            for (let i = 0; i < positions.length / 3; i++) {
+                const x0 = originalPositions[i * 3];
+                const y0 = originalPositions[i * 3 + 1]; // This now includes the offset
+                const z0 = originalPositions[i * 3 + 2];
+
+                const waveEffect = WAVE_AMPLITUDE * Math.sin(waveNumber * z0 - angularFrequency * elapsedTime);
+
+                positions[i * 3] = x0 * (1 + waveEffect);
+                positions[i * 3 + 1] = y0 - (x0 * waveEffect);
+            }
+
+            particles.geometry.attributes.position.needsUpdate = true;
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const width = canvasContainer.clientWidth;
+            const height = canvasContainer.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        // --- Start the application ---
+        init();
+        animate();
+    </script>
+</body>
+</html>
 
