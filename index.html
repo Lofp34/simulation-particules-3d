@@ -250,6 +250,10 @@
                 <div class="control-group single-button hidden" data-effect="fractal">
                     <button id="fractal-reset">Réinitialiser le Zoom</button>
                 </div>
+                <div class="control-group full-width hidden" data-effect="fractal">
+                    <label for="fractal-autozoom-toggle">Auto Zoom Infini</label>
+                    <input type="checkbox" id="fractal-autozoom-toggle">
+                </div>
             </div>
         </div>
     </div>
@@ -291,7 +295,7 @@
             tunnel: { density: 200, speed: 5 },
             kaleidoscope: { slices: 8, speed: 0.5 },
             gravwave: { amplitude: 0.25, wavelength: 150.0, gridSize: 50, gridSpacing: 3 },
-            fractal: { centerX: -0.5, centerY: 0, scale: 2, maxIterations: 100 }
+            fractal: { centerX: -0.5, centerY: 0, scale: 2, maxIterations: 100, autoZoom: false }
         };
 
         // --- Gestion des UI ---
@@ -319,7 +323,21 @@
             document.getElementById('k-speed').addEventListener('input', e => { config.kaleidoscope.speed = parseFloat(e.target.value); document.getElementById('k-speed-value').textContent = parseFloat(e.target.value).toFixed(1); });
             document.getElementById('gw-amplitude').addEventListener('input', e => { config.gravwave.amplitude = parseFloat(e.target.value); document.getElementById('gw-amplitude-value').textContent = parseFloat(e.target.value).toFixed(2); });
             document.getElementById('gw-wavelength').addEventListener('input', e => { config.gravwave.wavelength = parseFloat(e.target.value); document.getElementById('gw-wavelength-value').textContent = e.target.value; });
-            document.getElementById('fractal-reset').addEventListener('click', () => initFractal(true));
+            document.getElementById('fractal-reset').addEventListener('click', () => {
+                config.fractal.autoZoom = false;
+                document.getElementById('fractal-autozoom-toggle').checked = false;
+                initFractal(true);
+            });
+            document.getElementById('fractal-autozoom-toggle').addEventListener('change', e => {
+                config.fractal.autoZoom = e.target.checked;
+                if (config.fractal.autoZoom) {
+                    if (config.fractal.scale >= 2) {
+                        config.fractal.centerX = -0.745;
+                        config.fractal.centerY = 0.186;
+                    }
+                    autoZoomStep();
+                }
+            });
             fullscreenBtn.addEventListener('click', toggleFullscreen);
             toggleControlsBtn.addEventListener('click', toggleControlsPanel);
             document.addEventListener('fullscreenchange', updateFullscreenIcon);
@@ -366,6 +384,10 @@
         }
 
         function cleanupCurrentEffect() {
+            if (currentEffect === 'fractal') {
+                config.fractal.autoZoom = false;
+                document.getElementById('fractal-autozoom-toggle').checked = false;
+            }
             if (canvas) {
                 canvas.remove();
             }
@@ -451,7 +473,12 @@
             if (!fractal) {
                 const workerBlob = new Blob([document.getElementById('fractal-worker').textContent], { type: 'application/javascript' });
                 fractal = { worker: new Worker(URL.createObjectURL(workerBlob)) };
-                fractal.worker.onmessage = e => { if(ctx) ctx.putImageData(e.data, 0, 0); };
+                fractal.worker.onmessage = e => { 
+                    if(ctx) ctx.putImageData(e.data, 0, 0);
+                    if (config.fractal.autoZoom) {
+                        autoZoomStep();
+                    }
+                };
             }
             canvas.addEventListener('click', handleFractalClick);
             fractal.worker.postMessage({ ...config.fractal, width: canvas.width, height: canvas.height });
@@ -460,6 +487,10 @@
         // --- Gestionnaires d'Événements ---
         function handleFractalClick(e) {
             if (currentEffect !== 'fractal') return;
+            
+            config.fractal.autoZoom = false;
+            document.getElementById('fractal-autozoom-toggle').checked = false;
+
             canvas.removeEventListener('click', handleFractalClick);
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
@@ -469,6 +500,13 @@
             config.fractal.scale *= 0.5;
             config.fractal.maxIterations = Math.min(1000, Math.floor(config.fractal.maxIterations * 1.5));
             initFractal(false);
+        }
+
+        function autoZoomStep() {
+            if (currentEffect !== 'fractal' || !config.fractal.autoZoom) return;
+            config.fractal.scale *= 0.98;
+            config.fractal.maxIterations = Math.min(1000, config.fractal.maxIterations + 1);
+            fractal.worker.postMessage({ ...config.fractal, width: canvas.width, height: canvas.height });
         }
 
         // --- Fonctions de Dessin ---
