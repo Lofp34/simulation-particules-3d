@@ -20,7 +20,7 @@
             display: flex;
             flex-direction: column;
             height: 100%;
-            background-color: #000; /* Fond noir pour le mode plein écran */
+            background-color: #000;
         }
 
         .canvas-container {
@@ -38,20 +38,25 @@
             cursor: pointer;
         }
         
-        #fullscreen-btn {
+        .top-right-controls {
             position: absolute;
             top: 15px;
             right: 15px;
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+        }
+
+        .top-right-controls button {
             width: 32px;
             height: 32px;
             background: rgba(50, 50, 50, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 5px;
             cursor: pointer;
-            z-index: 10;
             padding: 5px;
         }
-        #fullscreen-btn svg {
+        .top-right-controls button svg {
             width: 100%;
             height: 100%;
             fill: white;
@@ -63,6 +68,16 @@
             background-color: rgba(10, 10, 10, 0.8);
             border-top: 1px solid #333;
             box-sizing: border-box;
+            transition: max-height 0.4s ease-in-out, padding-top 0.4s ease-in-out, padding-bottom 0.4s ease-in-out;
+            overflow: hidden;
+            max-height: 300px; /* Hauteur suffisante pour les contrôles */
+        }
+        
+        .main-container.controls-collapsed .controls-panel {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-top-color: transparent;
         }
 
         .effect-selector {
@@ -137,10 +152,16 @@
     <div class="main-container">
         <div class="canvas-container">
             <!-- Le canvas sera créé et inséré ici par le script -->
-            <button id="fullscreen-btn" title="Plein écran">
-                <svg id="icon-enter-fs" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path></svg>
-                <svg id="icon-exit-fs" viewBox="0 0 24 24" class="hidden"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"></path></svg>
-            </button>
+            <div class="top-right-controls">
+                <button id="toggle-controls-btn" title="Afficher/Cacher les contrôles">
+                    <svg id="icon-hide-controls" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"></path></svg>
+                    <svg id="icon-show-controls" viewBox="0 0 24 24" class="hidden"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"></path></svg>
+                </button>
+                <button id="fullscreen-btn" title="Plein écran">
+                    <svg id="icon-enter-fs" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path></svg>
+                    <svg id="icon-exit-fs" viewBox="0 0 24 24" class="hidden"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"></path></svg>
+                </button>
+            </div>
         </div>
         <div class="controls-panel">
             <div class="effect-selector">
@@ -253,6 +274,9 @@
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const iconEnterFs = document.getElementById('icon-enter-fs');
         const iconExitFs = document.getElementById('icon-exit-fs');
+        const toggleControlsBtn = document.getElementById('toggle-controls-btn');
+        const iconShowControls = document.getElementById('icon-show-controls');
+        const iconHideControls = document.getElementById('icon-hide-controls');
 
         effectButtons.forEach(btn => btn.addEventListener('click', () => switchEffect(btn.id.replace('btn-', ''))));
         
@@ -270,10 +294,11 @@
             document.getElementById('gw-wavelength').addEventListener('input', e => { config.gravwave.wavelength = parseFloat(e.target.value); document.getElementById('gw-wavelength-value').textContent = e.target.value; });
             document.getElementById('fractal-reset').addEventListener('click', () => initFractal(true));
             fullscreenBtn.addEventListener('click', toggleFullscreen);
+            toggleControlsBtn.addEventListener('click', toggleControlsPanel);
             document.addEventListener('fullscreenchange', updateFullscreenIcon);
         }
 
-        // --- Logique Plein Écran ---
+        // --- Logique UI ---
         function toggleFullscreen() {
             if (!document.fullscreenElement) {
                 mainContainer.requestFullscreen().catch(err => {
@@ -290,6 +315,14 @@
             iconExitFs.classList.toggle('hidden', !isFullscreen);
         }
 
+        function toggleControlsPanel() {
+            const isCollapsed = mainContainer.classList.toggle('controls-collapsed');
+            iconHideControls.classList.toggle('hidden', isCollapsed);
+            iconShowControls.classList.toggle('hidden', !isCollapsed);
+            // Redimensionner après l'animation pour un rendu correct
+            setTimeout(onResize, 400); 
+        }
+
         // --- Logique de Changement d'Effet ---
         function switchEffect(effectName) {
             cancelAnimationFrame(animationFrameId);
@@ -297,7 +330,7 @@
             currentEffect = effectName;
             
             canvas = document.createElement('canvas');
-            canvasContainer.insertBefore(canvas, fullscreenBtn);
+            canvasContainer.insertBefore(canvas, canvasContainer.firstChild);
 
             effectButtons.forEach(btn => btn.classList.toggle('active', btn.id === `btn-${effectName}`));
             allControls.forEach(control => control.classList.toggle('hidden', !control.dataset.effect.includes(effectName)));
@@ -338,6 +371,7 @@
 
         // --- Fonctions d'Initialisation Spécifiques ---
         function initTunnel() {
+            if (!canvas) return;
             tunnelParticles = Array.from({ length: config.tunnel.density }, () => ({
                 angle: Math.random() * Math.PI * 2,
                 radius: Math.random() * canvas.width / 4,
@@ -437,13 +471,15 @@
         // --- Boucle Principale et Initialisation ---
         function mainLoop(timestamp) {
             time = timestamp / 1000;
-            const w = canvas.width, h = canvas.height, cx = w/2, cy = h/2;
-
-            switch (currentEffect) {
-                case 'spiral': drawSpiral(w,h,cx,cy); break;
-                case 'tunnel': drawTunnel(w,h,cx,cy); break;
-                case 'kaleidoscope': drawKaleidoscope(w,h,cx,cy); break;
-                case 'gravwave': drawGravWave(); break;
+            
+            if (canvas) {
+                const w = canvas.width, h = canvas.height, cx = w/2, cy = h/2;
+                switch (currentEffect) {
+                    case 'spiral': drawSpiral(w,h,cx,cy); break;
+                    case 'tunnel': drawTunnel(w,h,cx,cy); break;
+                    case 'kaleidoscope': drawKaleidoscope(w,h,cx,cy); break;
+                    case 'gravwave': drawGravWave(); break;
+                }
             }
             animationFrameId = requestAnimationFrame(mainLoop);
         }
