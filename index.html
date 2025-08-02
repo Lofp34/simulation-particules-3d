@@ -20,6 +20,7 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            background-color: #000; /* Fond noir pour le mode plein écran */
         }
 
         .canvas-container {
@@ -28,7 +29,6 @@
             background-color: #000;
         }
 
-        /* Le style s'appliquera à l'élément canvas, quel qu'il soit */
         .canvas-container canvas {
             position: absolute;
             top: 0;
@@ -36,6 +36,25 @@
             width: 100%;
             height: 100%;
             cursor: pointer;
+        }
+        
+        #fullscreen-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 32px;
+            height: 32px;
+            background: rgba(50, 50, 50, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 10;
+            padding: 5px;
+        }
+        #fullscreen-btn svg {
+            width: 100%;
+            height: 100%;
+            fill: white;
         }
 
         .controls-panel {
@@ -118,6 +137,10 @@
     <div class="main-container">
         <div class="canvas-container">
             <!-- Le canvas sera créé et inséré ici par le script -->
+            <button id="fullscreen-btn" title="Plein écran">
+                <svg id="icon-enter-fs" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path></svg>
+                <svg id="icon-exit-fs" viewBox="0 0 24 24" class="hidden"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"></path></svg>
+            </button>
         </div>
         <div class="controls-panel">
             <div class="effect-selector">
@@ -206,6 +229,7 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
         let canvas;
+        const mainContainer = document.querySelector('.main-container');
         const canvasContainer = document.querySelector('.canvas-container');
         let ctx;
 
@@ -226,6 +250,10 @@
         // --- Gestion des UI ---
         const effectButtons = document.querySelectorAll('.effect-selector button');
         const allControls = document.querySelectorAll('.control-group');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const iconEnterFs = document.getElementById('icon-enter-fs');
+        const iconExitFs = document.getElementById('icon-exit-fs');
+
         effectButtons.forEach(btn => btn.addEventListener('click', () => switchEffect(btn.id.replace('btn-', ''))));
         
         // --- Liaison des Contrôles ---
@@ -241,6 +269,25 @@
             document.getElementById('gw-amplitude').addEventListener('input', e => { config.gravwave.amplitude = parseFloat(e.target.value); document.getElementById('gw-amplitude-value').textContent = parseFloat(e.target.value).toFixed(2); });
             document.getElementById('gw-wavelength').addEventListener('input', e => { config.gravwave.wavelength = parseFloat(e.target.value); document.getElementById('gw-wavelength-value').textContent = e.target.value; });
             document.getElementById('fractal-reset').addEventListener('click', () => initFractal(true));
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
+            document.addEventListener('fullscreenchange', updateFullscreenIcon);
+        }
+
+        // --- Logique Plein Écran ---
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                mainContainer.requestFullscreen().catch(err => {
+                    alert(`Erreur lors du passage en plein écran: ${err.message} (${err.name})`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function updateFullscreenIcon() {
+            const isFullscreen = !!document.fullscreenElement;
+            iconEnterFs.classList.toggle('hidden', isFullscreen);
+            iconExitFs.classList.toggle('hidden', !isFullscreen);
         }
 
         // --- Logique de Changement d'Effet ---
@@ -249,11 +296,8 @@
             cleanupCurrentEffect();
             currentEffect = effectName;
             
-            // --- FIX: Re-create canvas to avoid context conflicts ---
             canvas = document.createElement('canvas');
-            canvasContainer.innerHTML = ''; // Vider l'ancien contenu
-            canvasContainer.appendChild(canvas);
-            // --- END FIX ---
+            canvasContainer.insertBefore(canvas, fullscreenBtn);
 
             effectButtons.forEach(btn => btn.classList.toggle('active', btn.id === `btn-${effectName}`));
             allControls.forEach(control => control.classList.toggle('hidden', !control.dataset.effect.includes(effectName)));
@@ -263,6 +307,9 @@
         }
 
         function cleanupCurrentEffect() {
+            if (canvas) {
+                canvas.remove();
+            }
             if (three && three.renderer) {
                 three.controls.dispose();
                 three.renderer.dispose();
@@ -353,7 +400,7 @@
         // --- Gestionnaires d'Événements ---
         function handleFractalClick(e) {
             if (currentEffect !== 'fractal') return;
-            canvas.removeEventListener('click', handleFractalClick); // Éviter les clics multiples
+            canvas.removeEventListener('click', handleFractalClick);
             const rect = canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
